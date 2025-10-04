@@ -1,4 +1,3 @@
-```lua
 local player = game.Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -209,4 +208,3 @@ UserInputService.InputChanged:Connect(function(input)
 		)
 	end
 end)
-```
