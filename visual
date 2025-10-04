@@ -90,7 +90,6 @@ local TweenService = game:GetService("TweenService")
 desyncButton.MouseButton1Click:Connect(function()
 	print("Desync started!")
 
-	-- Чёрный экран
 	local moveFrame = Instance.new("Frame")
 	moveFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	moveFrame.Size = UDim2.new(1, 0, 1, 0)
@@ -100,7 +99,6 @@ desyncButton.MouseButton1Click:Connect(function()
 	moveFrame.BorderSizePixel = 0
 	moveFrame.Parent = screenGui
 
-	-- Текст "Moving..."
 	local moveText = Instance.new("TextLabel")
 	moveText.Size = UDim2.new(1, 0, 1, 0)
 	moveText.Position = UDim2.new(0, 0, 0, 0)
@@ -111,11 +109,9 @@ desyncButton.MouseButton1Click:Connect(function()
 	moveText.TextScaled = true
 	moveText.Parent = moveFrame
 
-	-- Анимация появления
 	local tweenIn = TweenService:Create(moveFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0})
 	tweenIn:Play()
 
-	-- Через 2 секунды убираем
 	task.delay(2, function()
 		local tweenOut = TweenService:Create(moveFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 1})
 		tweenOut:Play()
@@ -174,17 +170,19 @@ button.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- Перетаскивание меню
+-- 📱🖱 Перетаскивание меню (ПК + телефон)
 local UserInputService = game:GetService("UserInputService")
 local dragging = false
 local dragStart
 local startPos
 
 frame.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+	or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
 		dragStart = input.Position
 		startPos = frame.Position
+
 		input.Changed:Connect(function()
 			if input.UserInputState == Enum.UserInputState.End then
 				dragging = false
@@ -194,17 +192,25 @@ frame.InputBegan:Connect(function(input)
 end)
 
 frame.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
+	if input.UserInputType == Enum.UserInputType.MouseMovement 
+	or input.UserInputType == Enum.UserInputType.Touch then
 		dragInput = input
 	end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
+	or input.UserInputType == Enum.UserInputType.Touch) then
+		
 		local delta = input.Position - dragStart
-		frame.Position = UDim2.new(
-			startPos.X.Scale, startPos.X.Offset + delta.X,
-			startPos.Y.Scale, startPos.Y.Offset + delta.Y
-		)
+		local newX = startPos.X.Offset + delta.X
+		local newY = startPos.Y.Offset + delta.Y
+
+		-- Ограничение: чтобы меню не выходило за экран
+		local screenSize = workspace.CurrentCamera.ViewportSize
+		newX = math.clamp(newX, 0, screenSize.X - frame.AbsoluteSize.X)
+		newY = math.clamp(newY, 0, screenSize.Y - frame.AbsoluteSize.Y)
+
+		frame.Position = UDim2.new(0, newX, 0, newY)
 	end
 end)
