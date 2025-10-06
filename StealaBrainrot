@@ -1,23 +1,28 @@
 -- LocalScript: положите в StarterPlayer > StarterPlayerScripts и запускайте через Play в Roblox Studio.
--- Горячие клавиши:
--- K — Freeze: визуально "замораживает" всех других игроков.
--- J — Jerky: рывки у всех других игроков.
--- Локальный персонаж (LocalPlayer) НЕ затрагивается.
+-- Это только клиентская (локальная) визуализация: никаких серверных изменений.
+-- Горячие клавиши (чтобы не писать в чате):
+-- K — Freeze: визуально «замораживает» всех на экране на заданное время.
+-- J — Jerky: короткие мелкие рывки / «телепорты» для всех персонажей в пределах видимости.
+-- ВАЖНО: тестируйте в Studio (Play). В реальной сетевой игре с FilteringEnabled изменение других персонажей может быть ограничено.
+-- Меняйте параметры в разделе CONFIG.
 
 local Players = game("Players")
+local RunService = game("RunService")
 local UserInputService = game("UserInputService")
+local Workspace = game("Workspace")
 
 local localPlayer = Players.LocalPlayer
 
 -- ================== CONFIG ==================
-local FREEZE_DURATION = 8 -- длительность freeze (сек)
-local JERKY_DURATION = 8 -- длительность jerky (сек)
-local JERKY_INTERVAL = 0.25 -- интервал рывков
-local JERKY_TELEPORT_SIZE = 1.2 -- сила рывка
-local MAX_DURATION = 300
+local FREEZE_DURATION = 8 -- длительность freeze в секундах (по умолчанию для теста)
+local JERKY_DURATION = 8 -- длительность jerky в сек
+local JERKY_INTERVAL = 0.25 -- интервал между «рывками»
+local JERKY_TELEPORT_SIZE = 1.2 -- радиус/мощность мелкого телепорта (в studs)
+local MAX_DURATION = 300 -- защита от слишком долгих эффектов
 -- ============================================
 
-local stateStore = {}
+-- Хранилище для восстановления состояний (локально)
+local stateStore = {} -- [character] = { anchored = bool, platformStand = bool, walkSpeed = number, jumpPower = number, rootCFrame = CFrame (optional) }
 
 local function safeFindHumanoid(char)
 if not char then return nil end
@@ -39,6 +44,7 @@ if humanoid then
 s.platformStand = humanoid.PlatformStand
 s.walkSpeed = humanoid.WalkSpeed
 s.jumpPower = humanoid.JumpPower or humanoid.JumpHeight
+-- AutoRotate может быть nil => не сохраняем если nil
 if humanoid.AutoRotate ~= nil then s.autoRotate = humanoid.AutoRotate end
 end
 if root then
@@ -63,16 +69,16 @@ if s.autoRotate ~= nil and humanoid.AutoRotate ~= nil then humanoid.AutoRotate =
 end
 if root and s.anchored ~= nil then root.Anchored = s.anchored end
 if root and s.rootCFrame then
+-- попытаемся аккуратно вернуть на место (локально)
 root.CFrame = s.rootCFrame
 end
 end)
 stateStore[char] = nil
 end
 
--- Freeze для всех КРОМЕ localPlayer
+-- Применяем локальную "заморозку" (визуально) ко всем персонажам в игровом мире
 local function applyFreezeToAll(enable)
 for _, pl in ipairs(Players()) do
-if pl ~= localPlayer then
 local char = pl.Character
 if char then
 saveState(char)
@@ -86,30 +92,34 @@ if humanoid.AutoRotate ~= nil then humanoid.AutoRotate = false end
 if humanoid.WalkSpeed ~= nil then humanoid.WalkSpeed = 0 end
 if humanoid.JumpPower ~= nil then humanoid.JumpPower = 0 end
 end
-if root then root.Anchored = true end
+if root then
+root.Anchored = true
+end
 else
+-- Восстановление через restoreState
 restoreState(char)
 end
 end)
 end
 end
 end
-end
 
--- Рывки для всех КРОМЕ localPlayer
+-- Небольшой локальный «рывок» — смещаем каждый корень на маленькую рандом-величину и возвращаем
 local function performSmallTeleportOnAll()
 for _, pl in ipairs(Players()) do
-if pl ~= localPlayer then
 local char = pl.Character
 if char then
 local root = safeFindRoot(char)
 if root then
 pcall(function()
+-- сохраняем текущее CFrame, потом ставим немного смещённый, через очень короткое время вернём
 local orig = root.CFrame
+-- небольшое случайное смещение в плане XZ и немного вверх/вниз
 local dx = (math.random() - 0.5) * JERKY_TELEPORT_SIZE
 local dz = (math.random() - 0.5) * JERKY_TELEPORT_SIZE
 local dy = (math.random() - 0.5) * (JERKY_TELEPORT_SIZE * 0.3)
 root.CFrame = orig * CFrame.new(dx, dy, dz)
+-- небольшой срок — вернём чуть позже (локально)
 delay(0.08, function()
 pcall(function() if root then root.CFrame = orig end end)
 end)
@@ -118,35 +128,37 @@ end
 end
 end
 end
-end
 
--- Запуск режимов
+-- Запуск режима "jerky": периодически делаем мелкие телепорты (рывки)
 local function runJerky(duration, interval)
-duration = math.min(duration or JERKY_DURATION, MAX_DURATION)
-interval = math.max(interval or JERKY_INTERVAL, 0.05)
+duration = math.min(tonumber(duration) or JERKY_DURATION, MAX_DURATION)
+interval = math.max(tonumber(interval) or JERKY_INTERVAL, 0.05)
 local t0 = tick()
 while tick() - t0 < duration do
 performSmallTeleportOnAll()
 wait(interval)
 end
-for char in pairs(stateStore) do
+-- гарантированно восстановим состояния (на всякий)
+for char, _ in pairs(stateStore) do
 restoreState(char)
 end
 end
 
+-- Запуск режима Freeze
 local function runFreeze(duration)
-duration = math.min(duration or FREEZE_DURATION, MAX_DURATION)
+duration = math.min(tonumber(duration) or FREEZE_DURATION, MAX_DURATION)
 applyFreezeToAll(true)
 delay(duration, function()
-for char in pairs(stateStore) do
+-- восстановление после времени
+for char, _ in pairs(stateStore) do
 restoreState(char)
 end
 end)
 end
 
--- Горячие клавиши
-UserInputService.InputBegan(function(input, processed)
-if processed then return end
+-- Быстрые горячие клавиши (K/J) — без чата
+UserInputService.InputBegan(function(input, gameProcessed)
+if gameProcessed then return end
 if input.UserInputType == Enum.UserInputType.Keyboard then
 if input.KeyCode == Enum.KeyCode.K then
 runFreeze(FREEZE_DURATION)
@@ -155,3 +167,27 @@ spawn(function() runJerky(JERKY_DURATION, JERKY_INTERVAL) end)
 end
 end
 end)
+
+-- Защита: при уходе игроков или при новом Character восстанавливаем сохранённые состояния
+Players.PlayerRemoving(function(p)
+local ch = p.Character
+if ch then restoreState(ch) end
+end)
+
+Players.PlayerAdded(function(p)
+p.CharacterAdded(function(char)
+-- если вдруг сохранённое состояние осталось — восстановим
+restoreState(char)
+end)
+end)
+
+-- При остановке/выходе Studio — восстановим всё
+local function cleanup()
+for char, _ in pairs(stateStore) do
+restoreState(char)
+end
+end
+pcall(function() game(cleanup) end)
+
+-- Конец скрипта
+return nil
