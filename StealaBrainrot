@@ -1,23 +1,27 @@
--- LocalScript: поместить в StarterPlayer > StarterPlayerScripts. ТОЛЬКО для локальных тестов / демонстраций в Studio.
--- Поведение: создаёт визуальный клон персонажа и управляет им; твой реальный персонаж остаётся под контролем сервера.
--- Это не чит и не обходит античит.
+-- LocalScript: StarterPlayer > StarterPlayerScripts
+-- Только для локальных тестов/демонстраций в Studio
+-- Клавиша R — включить/выключить Fly
+-- Камера свободно вращается вокруг клона
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-
 local FLY_SPEED = 60
 local SMOOTH = 0.12
-local cloneModel = nil
-local active = false
 
+local active = false
+local cloneModel = nil
+local vel = Vector3.new(0,0,0)
+local keys = {}
+
+-- Создание визуального клона
 local function createVisualClone(character)
 if not character then return nil end
 local clone = Instance.new("Model")
 clone.Name = "VisualFlyClone"
--- клонируем видимые части (Head, Torso, Limbs, Accessories)
 for _, obj in ipairs(character:GetDescendants()) do
 if obj:IsA("BasePart") then
 local p = obj:Clone()
@@ -25,28 +29,16 @@ p.Anchored = true
 p.CanCollide = false
 p.Parent = clone
 elseif obj:IsA("Accessory") then
-local a = obj:Clone()
-a.Parent = clone
+obj:Clone().Parent = clone
 end
 end
-clone.Parent = workspace
+clone.Parent = Workspace
 return clone
 end
 
-local function syncCloneToCharacter(clone, character)
-if not clone or not character then return end
-for _, part in ipairs(clone:GetChildren()) do
-if part:IsA("BasePart") then
-local orig = character:FindFirstChild(part.Name, true) -- по имени в иерархии
-if orig and orig:IsA("BasePart") then
-pcall(function() part.CFrame = orig.CFrame end)
-end
-end
-end
-end
-
-local function getCameraMoveVector(keys)
-local cam = workspace.CurrentCamera
+-- Получаем вектор движения по нажатым клавишам
+local function getMoveVector()
+local cam = Workspace.CurrentCamera
 if not cam then return Vector3.new(0,0,0) end
 local forward = cam.CFrame.LookVector
 local right = cam.CFrame.RightVector
@@ -61,59 +53,59 @@ if mv.Magnitude > 0 then mv = mv.Unit * FLY_SPEED end
 return mv
 end
 
-local keys = {}
-UserInputService.InputBegan:Connect(function(i,gp) if i.UserInputType==Enum.UserInputType.Keyboard then keys[i.KeyCode]=true end end)
-UserInputService.InputEnded:Connect(function(i,gp) if i.UserInputType==Enum.UserInputType.Keyboard then keys[i.KeyCode]=nil end end)
-
--- Toggle fly with E
+-- Горячие клавиши
 UserInputService.InputBegan:Connect(function(input, processed)
 if processed then return end
-if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.E then
+if input.UserInputType == Enum.UserInputType.Keyboard then
+keys[input.KeyCode] = true
+if input.KeyCode == Enum.KeyCode.R then
 active = not active
-if active then
 local char = player.Character or player.CharacterAdded:Wait()
+if active then
 cloneModel = createVisualClone(char)
--- optionally hide local camera subject (not changing server)
-workspace.CurrentCamera.CameraSubject = cloneModel:FindFirstChildWhichIsA("BasePart") or char:FindFirstChildOfClass("Humanoid")
+-- Камера следует за клоном
+local primary = cloneModel:FindFirstChild("HumanoidRootPart") or cloneModel:FindFirstChildWhichIsA("BasePart")
+if primary then
+Workspace.CurrentCamera.CameraSubject = primary
+end
 else
 if cloneModel then
 cloneModel:Destroy()
 cloneModel = nil
 end
--- restore camera
-local char = player.Character
+-- Восстановление камеры
 if char then
 local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then workspace.CurrentCamera.CameraSubject = hum end
+if hum then Workspace.CurrentCamera.CameraSubject = hum end
+end
 end
 end
 end
 end)
 
-local vel = Vector3.new(0,0,0)
+UserInputService.InputEnded:Connect(function(input, processed)
+if input.UserInputType == Enum.UserInputType.Keyboard then
+keys[input.KeyCode] = nil
+end
+end)
+
+-- Основной цикл движения
 RunService.RenderStepped:Connect(function(dt)
 if not active or not cloneModel then return end
-local char = player.Character
-if not char then return end
--- управление визуальным клоном: смещаем все клонированные части плавно
-local desired = getCameraMoveVector(keys)
-vel = vel:Lerp(desired, SMOOTH)
+vel = vel:Lerp(getMoveVector(), SMOOTH)
 for _, part in ipairs(cloneModel:GetChildren()) do
 if part:IsA("BasePart") then
 part.CFrame = part.CFrame + vel * dt
 end
 end
--- камера следует за клоном (используем CFrame камеры)
+-- Камера свободно вращается вокруг клона (локально)
 local primary = cloneModel:FindFirstChild("HumanoidRootPart") or cloneModel:FindFirstChildWhichIsA("BasePart")
 if primary then
-workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(primary.CFrame * CFrame.new(0, 2, 6), 0.2)
+Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame:Lerp(primary.CFrame * CFrame.new(0,2,6), 0.2)
 end
 end)
 
--- При респе/выходе — чистим
+-- Очистка при респе
 player.CharacterRemoving:Connect(function()
-if cloneModel then cloneModel:Destroy(); cloneModel = nil end
+if cloneModel then cloneModel:Destroy() cloneModel = nil end
 end)
-
--- Конец локального визуального флая
-return nil
