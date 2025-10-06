@@ -1,193 +1,222 @@
--- LocalScript: положите в StarterPlayer > StarterPlayerScripts и запускайте через Play в Roblox Studio.
--- Это **только клиентская** (локальная) визуализация: никаких серверных изменений.
--- Горячие клавиши (чтобы не писать в чате):
--- K — Freeze: визуально «замораживает» всех на экране на заданное время.
--- J — Jerky: короткие мелкие рывки / «телепорты» для всех персонажей в пределах видимости.
--- ВАЖНО: тестируйте в Studio (Play). В реальной сетевой игре с FilteringEnabled изменение других персонажей может быть ограничено.
--- Меняйте параметры в разделе CONFIG.
+-- LocalScript -> положите в StarterPlayer > StarterPlayerScripts
+-- Описание: F переключает ragdoll-подобный режим, E переключает fly.
+-- Скрипт клиентский: изменяет только локальную физику игрока (для тестирования/эффектов в собственной игре).
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
 
-local localPlayer = Players.LocalPlayer
+local RAGDOLL_KEY = Enum.KeyCode.F
+local FLY_KEY = Enum.KeyCode.E
 
--- ================== CONFIG ==================
-local FREEZE_DURATION = 8          -- длительность freeze в секундах (по умолчанию для теста)
-local JERKY_DURATION = 90           -- длительность jerky в сек
-local JERKY_INTERVAL = 0.25        -- интервал между «рывками»
-local JERKY_TELEPORT_SIZE = 1.2    -- радиус/мощность мелкого телепорта (в studs)
-local MAX_DURATION = 300           -- защита от слишком долгих эффектов
--- ============================================
+local flyActive = false
+local ragdollActive = false
 
--- Хранилище для восстановления состояний (локально)
-local stateStore = {} -- [character] = { anchored = bool, platformStand = bool, walkSpeed = number, jumpPower = number, rootCFrame = CFrame (optional) }
+local BV, BG -- BodyVelocity, BodyGyro (для полёта)
+local moveState = {W=false, A=false, S=false, D=false, Up=false, Down=false}
+local flySpeed = 80 -- можно менять
+local verticalSpeed = 50
 
-local function safeFindHumanoid(char)
-if not char then return nil end
-return char:FindFirstChildOfClass("Humanoid")
+-- Utility: получить character & humanoid & hrp
+local function getChar()
+local char = player.Character
+if char and char.Parent then
+local humanoid = char:FindFirstChildOfClass("Humanoid")
+local hrp = char:FindFirstChild("HumanoidRootPart")
+return char, humanoid, hrp
+end
+return nil, nil, nil
 end
 
-local function safeFindRoot(char)
-if not char then return nil end
-return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-end
+-- Включаем ragdoll-подобный режим
+local function enableRagdoll()
+local char, humanoid, hrp = getChar()
+if not humanoid or not hrp then return end
 
-local function saveState(char)
-if not char or not char.Parent then return end
-if stateStore[char] then return end
-local s = {}
-local humanoid = safeFindHumanoid(char)
-local root = safeFindRoot(char)
-if humanoid then
-s.platformStand = humanoid.PlatformStand
-s.walkSpeed = humanoid.WalkSpeed
-s.jumpPower = humanoid.JumpPower or humanoid.JumpHeight
--- AutoRotate может быть nil => не сохраняем если nil
-if humanoid.AutoRotate ~= nil then s.autoRotate = humanoid.AutoRotate end
-end
-if root then
-s.anchored = root.Anchored
-s.rootCFrame = root.CFrame
-end
-stateStore[char] = s
-end
+```
+-- Сохраняем текущую скорость (чтобы при выходе можно было её учесть)
+local vel = hrp.AssemblyLinearVelocity
 
-local function restoreState(char)
-if not char then return end
-local s = stateStore[char]
-if not s then return end
-local humanoid = safeFindHumanoid(char)
-local root = safeFindRoot(char)
-pcall(function()
-if humanoid then
-if s.platformStand ~= nil then humanoid.PlatformStand = s.platformStand end
-if s.walkSpeed ~= nil then humanoid.WalkSpeed = s.walkSpeed end
-if s.jumpPower ~= nil and humanoid.JumpPower ~= nil then humanoid.JumpPower = s.jumpPower end
-if s.autoRotate ~= nil and humanoid.AutoRotate ~= nil then humanoid.AutoRotate = s.autoRotate end
-end
-if root and s.anchored ~= nil then root.Anchored = s.anchored end
-if root and s.rootCFrame then
--- попытаемся аккуратно вернуть на место (локально)
-root.CFrame = s.rootCFrame
-end
-end)
-stateStore[char] = nil
-end
-
--- Применяем локальную "заморозку" (визуально) ко всем персонажам в игровом мире
-local function applyFreezeToAll(enable)
-for _, pl in ipairs(Players:GetPlayers()) do
-local char = pl.Character
-if char then
-saveState(char)
-local humanoid = safeFindHumanoid(char)
-local root = safeFindRoot(char)
-pcall(function()
-if enable then
-if humanoid then
+-- Переводим Humanoid в физическое состояние
+-- (не ломает моторы, даёт физическое поведение)
+pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
 humanoid.PlatformStand = true
-if humanoid.AutoRotate ~= nil then humanoid.AutoRotate = false end
-if humanoid.WalkSpeed ~= nil then humanoid.WalkSpeed = 0 end
-if humanoid.JumpPower ~= nil then humanoid.JumpPower = 0 end
-end
-if root then
-root.Anchored = true
-end
-else
--- Восстановление через restoreState
-restoreState(char)
-end
-end)
-end
-end
+
+-- Немного толчка для наглядности ragdoll-эффекта
+hrp.AssemblyLinearVelocity = vel
+
+ragdollActive = true
+```
+
 end
 
--- Небольшой локальный «рывок» — смещаем каждый корень на маленькую рандом-величину и возвращаем
-local function performSmallTeleportOnAll()
-for _, pl in ipairs(Players:GetPlayers()) do
-local char = pl.Character
-if char then
-local root = safeFindRoot(char)
-if root then
-pcall(function()
--- сохраняем текущее CFrame, потом ставим немного смещённый, через очень короткое время вернём
-local orig = root.CFrame
--- небольшое случайное смещение в плане XZ и немного вверх/вниз
-local dx = (math.random() - 0.5) * JERKY_TELEPORT_SIZE
-local dz = (math.random() - 0.5) * JERKY_TELEPORT_SIZE
-local dy = (math.random() - 0.5) * (JERKY_TELEPORT_SIZE * 0.3)
-root.CFrame = orig * CFrame.new(dx, dy, dz)
--- небольшой срок — вернём чуть позже (локально)
-delay(0.08, function()
-pcall(function() if root then root.CFrame = orig end end)
-end)
-end)
-end
-end
-end
+-- Выключаем ragdoll-подобный режим (возвращаем управление аниматору)
+local function disableRagdoll()
+local char, humanoid, hrp = getChar()
+if not humanoid or not hrp then return end
+
+```
+-- Выключаем физическое состояние
+-- Снимаем PlatformStand, возвращаем состояние стоя (Running или GettingUp)
+humanoid.PlatformStand = false
+pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+
+ragdollActive = false
+```
+
 end
 
--- Запуск режима "jerky": периодически делаем мелкие телепорты (рывки)
-local function runJerky(duration, interval)
-duration = math.min(tonumber(duration) or JERKY_DURATION, MAX_DURATION)
-interval = math.max(tonumber(interval) or JERKY_INTERVAL, 0.05)
-local t0 = tick()
-while tick() - t0 < duration do
-performSmallTeleportOnAll()
-wait(interval)
-end
--- гарантированно восстановим состояния (на всякий)
-for char, _ in pairs(stateStore) do
-restoreState(char)
-end
+-- Включаем полёт (локально)
+local function enableFly()
+local char, humanoid, hrp = getChar()
+if not humanoid or not hrp then return end
+
+```
+-- Если есть старые объекты — удаляем
+if BV and BV.Parent then BV:Destroy() end
+if BG and BG.Parent then BG:Destroy() end
+
+BV = Instance.new("BodyVelocity")
+BV.Name = "LocalFly_BV"
+BV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+BV.P = 3000
+BV.Velocity = Vector3.new(0,0,0)
+BV.Parent = hrp
+
+BG = Instance.new("BodyGyro")
+BG.Name = "LocalFly_BG"
+BG.MaxTorque = Vector3.new(1e5,1e5,1e5)
+BG.P = 3000
+BG.CFrame = hrp.CFrame
+BG.Parent = hrp
+
+-- Заблокируем стандартную гравитацию/прыжки локально
+humanoid.PlatformStand = true
+
+flyActive = true
+```
+
 end
 
--- Запуск режима Freeze
-local function runFreeze(duration)
-duration = math.min(tonumber(duration) or FREEZE_DURATION, MAX_DURATION)
-applyFreezeToAll(true)
-delay(duration, function()
--- восстановление после времени
-for char, _ in pairs(stateStore) do
-restoreState(char)
+-- Выключаем полёт
+local function disableFly()
+local char, humanoid, hrp = getChar()
+if BV and BV.Parent then BV:Destroy() end
+if BG and BG.Parent then BG:Destroy() end
+BV, BG = nil, nil
+
+```
+if humanoid then
+    humanoid.PlatformStand = false
 end
+
+flyActive = false
+```
+
+end
+
+-- Обработка нажатий WASD/Space для движения в полёте
+UserInputService.InputBegan:Connect(function(input, processed)
+if processed then return end
+if input.KeyCode == Enum.KeyCode.W then moveState.W = true end
+if input.KeyCode == Enum.KeyCode.S then moveState.S = true end
+if input.KeyCode == Enum.KeyCode.A then moveState.A = true end
+if input.KeyCode == Enum.KeyCode.D then moveState.D = true end
+if input.KeyCode == Enum.KeyCode.Space then moveState.Up = true end
+if input.KeyCode == Enum.KeyCode.LeftControl then moveState.Down = true end
+
+```
+-- Переключатели клавиш
+if input.KeyCode == RAGDOLL_KEY then
+    if ragdollActive then
+        disableRagdoll()
+    else
+        -- если летим — сначала выключим полёт, затем ragdoll
+        if flyActive then disableFly() end
+        enableRagdoll()
+    end
+end
+
+if input.KeyCode == FLY_KEY then
+    if flyActive then
+        disableFly()
+    else
+        -- если в ragdoll — сначала выключаем ragdoll (чтобы не конфликтовали)
+        if ragdollActive then disableRagdoll() end
+        enableFly()
+    end
+end
+```
+
 end)
-end
 
--- Быстрые горячие клавиши (K/J) — без чата
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-if gameProcessed then return end
-if input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode == Enum.KeyCode.K then
-runFreeze(FREEZE_DURATION)
-elseif input.KeyCode == Enum.KeyCode.J then
-spawn(function() runJerky(JERKY_DURATION, JERKY_INTERVAL) end)
-end
-end
+UserInputService.InputEnded:Connect(function(input, processed)
+if input.KeyCode == Enum.KeyCode.W then moveState.W = false end
+if input.KeyCode == Enum.KeyCode.S then moveState.S = false end
+if input.KeyCode == Enum.KeyCode.A then moveState.A = false end
+if input.KeyCode == Enum.KeyCode.D then moveState.D = false end
+if input.KeyCode == Enum.KeyCode.Space then moveState.Up = false end
+if input.KeyCode == Enum.KeyCode.LeftControl then moveState.Down = false end
 end)
 
--- Защита: при уходе игроков или при новом Character восстанавливаем сохранённые состояния
-Players.PlayerRemoving:Connect(function(p)
-local ch = p.Character
-if ch then restoreState(ch) end
-end)
-
-Players.PlayerAdded:Connect(function(p)
-p.CharacterAdded:Connect(function(char)
--- если вдруг сохранённое состояние осталось — восстановим
-restoreState(char)
-end)
-end)
-
--- При остановке/выходе Studio — восстановим всё
-local function cleanup()
-for char, _ in pairs(stateStore) do
-restoreState(char)
+-- Основной цикл: обновление скорости полёта
+RunService.RenderStepped:Connect(function(dt)
+if not flyActive then return end
+local char, humanoid, hrp = getChar()
+if not char or not humanoid or not hrp then
+disableFly()
+return
 end
-end
-pcall(function() game:BindToClose(cleanup) end)
 
--- Конец скрипта
-return nil
+```
+local cam = workspace.CurrentCamera
+local look = cam.CFrame.LookVector
+local right = cam.CFrame.RightVector
+local moveVec = Vector3.new(0,0,0)
+
+if moveState.W then moveVec = moveVec + Vector3.new(look.X, 0, look.Z) end
+if moveState.S then moveVec = moveVec - Vector3.new(look.X, 0, look.Z) end
+if moveState.A then moveVec = moveVec - Vector3.new(right.X, 0, right.Z) end
+if moveState.D then moveVec = moveVec + Vector3.new(right.X, 0, right.Z) end
+moveVec = moveVec.Unit
+if moveVec ~= moveVec then moveVec = Vector3.new(0,0,0) end -- защитa от NaN
+
+local vertical = 0
+if moveState.Up then vertical = vertical + verticalSpeed end
+if moveState.Down then vertical = vertical - verticalSpeed end
+
+-- Финальная скорость
+local targetVel = (moveVec * flySpeed) + Vector3.new(0, vertical, 0)
+
+if BV then
+    BV.Velocity = Vector3.new(targetVel.X, targetVel.Y, targetVel.Z)
+end
+
+if BG then
+    -- Поворачиваем туловище в направлении камеры плавно
+    BG.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector)
+end
+```
+
+end)
+
+-- Очистка при смерти/смене персонажа
+player.CharacterRemoving:Connect(function()
+disableFly()
+disableRagdoll()
+end)
+
+player.CharacterAdded:Connect(function(char)
+-- небольшой лаг, чтобы humanoid/parts появились
+wait(0.1)
+-- сброс состояний
+disableFly()
+disableRagdoll()
+end)
+
+-- Конечный совет:
+-- - Настройте flySpeed и verticalSpeed по вкусу.
+-- - Для server-стабильности/синхронизации эффектов (если хотите, чтобы регдолл виделся всем игрокам)
+--   нужно реализовать серверный вариант (серверный Script), который корректно управляет Motor6D/Constraints.
+--   Здесь же — полностью клиентская версия для безопасного локального теста.
