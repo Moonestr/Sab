@@ -1,111 +1,193 @@
--- LocalScript: StarterPlayer > StarterPlayerScripts
--- Только для локальных тестов/демонстраций в Studio
--- Клавиша R — включить/выключить Fly
--- Камера свободно вращается вокруг клона
+-- LocalScript: положите в StarterPlayer > StarterPlayerScripts и запускайте через Play в Roblox Studio.
+-- Это **только клиентская** (локальная) визуализация: никаких серверных изменений.
+-- Горячие клавиши (чтобы не писать в чате):
+-- K — Freeze: визуально «замораживает» всех на экране на заданное время.
+-- J — Jerky: короткие мелкие рывки / «телепорты» для всех персонажей в пределах видимости.
+-- ВАЖНО: тестируйте в Studio (Play). В реальной сетевой игре с FilteringEnabled изменение других персонажей может быть ограничено.
+-- Меняйте параметры в разделе CONFIG.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
-local player = Players.LocalPlayer
-local FLY_SPEED = 60
-local SMOOTH = 0.12
+local localPlayer = Players.LocalPlayer
 
-local active = false
-local cloneModel = nil
-local vel = Vector3.new(0,0,0)
-local keys = {}
+-- ================== CONFIG ==================
+local FREEZE_DURATION = 8          -- длительность freeze в секундах (по умолчанию для теста)
+local JERKY_DURATION = 90           -- длительность jerky в сек
+local JERKY_INTERVAL = 0.25        -- интервал между «рывками»
+local JERKY_TELEPORT_SIZE = 1.2    -- радиус/мощность мелкого телепорта (в studs)
+local MAX_DURATION = 300           -- защита от слишком долгих эффектов
+-- ============================================
 
--- Создание визуального клона
-local function createVisualClone(character)
-if not character then return nil end
-local clone = Instance.new("Model")
-clone.Name = "VisualFlyClone"
-for _, obj in ipairs(character:GetDescendants()) do
-if obj:IsA("BasePart") then
-local p = obj:Clone()
-p.Anchored = true
-p.CanCollide = false
-p.Parent = clone
-elseif obj:IsA("Accessory") then
-obj:Clone().Parent = clone
-end
-end
-clone.Parent = Workspace
-return clone
+-- Хранилище для восстановления состояний (локально)
+local stateStore = {} -- [character] = { anchored = bool, platformStand = bool, walkSpeed = number, jumpPower = number, rootCFrame = CFrame (optional) }
+
+local function safeFindHumanoid(char)
+if not char then return nil end
+return char:FindFirstChildOfClass("Humanoid")
 end
 
--- Получаем вектор движения по нажатым клавишам
-local function getMoveVector()
-local cam = Workspace.CurrentCamera
-if not cam then return Vector3.new(0,0,0) end
-local forward = cam.CFrame.LookVector
-local right = cam.CFrame.RightVector
-local mv = Vector3.new(0,0,0)
-if keys[Enum.KeyCode.W] then mv = mv + forward end
-if keys[Enum.KeyCode.S] then mv = mv - forward end
-if keys[Enum.KeyCode.A] then mv = mv - right end
-if keys[Enum.KeyCode.D] then mv = mv + right end
-if keys[Enum.KeyCode.Space] then mv = mv + Vector3.new(0,1,0) end
-if keys[Enum.KeyCode.LeftControl] then mv = mv - Vector3.new(0,1,0) end
-if mv.Magnitude > 0 then mv = mv.Unit * FLY_SPEED end
-return mv
+local function safeFindRoot(char)
+if not char then return nil end
+return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
 end
 
--- Горячие клавиши
-UserInputService.InputBegan:Connect(function(input, processed)
-if processed then return end
-if input.UserInputType == Enum.UserInputType.Keyboard then
-keys[input.KeyCode] = true
-if input.KeyCode == Enum.KeyCode.R then
-active = not active
-local char = player.Character or player.CharacterAdded:Wait()
-if active then
-cloneModel = createVisualClone(char)
--- Камера следует за клоном
-local primary = cloneModel:FindFirstChild("HumanoidRootPart") or cloneModel:FindFirstChildWhichIsA("BasePart")
-if primary then
-Workspace.CurrentCamera.CameraSubject = primary
+local function saveState(char)
+if not char or not char.Parent then return end
+if stateStore[char] then return end
+local s = {}
+local humanoid = safeFindHumanoid(char)
+local root = safeFindRoot(char)
+if humanoid then
+s.platformStand = humanoid.PlatformStand
+s.walkSpeed = humanoid.WalkSpeed
+s.jumpPower = humanoid.JumpPower or humanoid.JumpHeight
+-- AutoRotate может быть nil => не сохраняем если nil
+if humanoid.AutoRotate ~= nil then s.autoRotate = humanoid.AutoRotate end
+end
+if root then
+s.anchored = root.Anchored
+s.rootCFrame = root.CFrame
+end
+stateStore[char] = s
+end
+
+local function restoreState(char)
+if not char then return end
+local s = stateStore[char]
+if not s then return end
+local humanoid = safeFindHumanoid(char)
+local root = safeFindRoot(char)
+pcall(function()
+if humanoid then
+if s.platformStand ~= nil then humanoid.PlatformStand = s.platformStand end
+if s.walkSpeed ~= nil then humanoid.WalkSpeed = s.walkSpeed end
+if s.jumpPower ~= nil and humanoid.JumpPower ~= nil then humanoid.JumpPower = s.jumpPower end
+if s.autoRotate ~= nil and humanoid.AutoRotate ~= nil then humanoid.AutoRotate = s.autoRotate end
+end
+if root and s.anchored ~= nil then root.Anchored = s.anchored end
+if root and s.rootCFrame then
+-- попытаемся аккуратно вернуть на место (локально)
+root.CFrame = s.rootCFrame
+end
+end)
+stateStore[char] = nil
+end
+
+-- Применяем локальную "заморозку" (визуально) ко всем персонажам в игровом мире
+local function applyFreezeToAll(enable)
+for _, pl in ipairs(Players:GetPlayers()) do
+local char = pl.Character
+if char then
+saveState(char)
+local humanoid = safeFindHumanoid(char)
+local root = safeFindRoot(char)
+pcall(function()
+if enable then
+if humanoid then
+humanoid.PlatformStand = true
+if humanoid.AutoRotate ~= nil then humanoid.AutoRotate = false end
+if humanoid.WalkSpeed ~= nil then humanoid.WalkSpeed = 0 end
+if humanoid.JumpPower ~= nil then humanoid.JumpPower = 0 end
+end
+if root then
+root.Anchored = true
 end
 else
-if cloneModel then
-cloneModel:Destroy()
-cloneModel = nil
+-- Восстановление через restoreState
+restoreState(char)
 end
--- Восстановление камеры
+end)
+end
+end
+end
+
+-- Небольшой локальный «рывок» — смещаем каждый корень на маленькую рандом-величину и возвращаем
+local function performSmallTeleportOnAll()
+for _, pl in ipairs(Players:GetPlayers()) do
+local char = pl.Character
 if char then
-local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then Workspace.CurrentCamera.CameraSubject = hum end
+local root = safeFindRoot(char)
+if root then
+pcall(function()
+-- сохраняем текущее CFrame, потом ставим немного смещённый, через очень короткое время вернём
+local orig = root.CFrame
+-- небольшое случайное смещение в плане XZ и немного вверх/вниз
+local dx = (math.random() - 0.5) * JERKY_TELEPORT_SIZE
+local dz = (math.random() - 0.5) * JERKY_TELEPORT_SIZE
+local dy = (math.random() - 0.5) * (JERKY_TELEPORT_SIZE * 0.3)
+root.CFrame = orig * CFrame.new(dx, dy, dz)
+-- небольшой срок — вернём чуть позже (локально)
+delay(0.08, function()
+pcall(function() if root then root.CFrame = orig end end)
+end)
+end)
 end
 end
 end
+end
+
+-- Запуск режима "jerky": периодически делаем мелкие телепорты (рывки)
+local function runJerky(duration, interval)
+duration = math.min(tonumber(duration) or JERKY_DURATION, MAX_DURATION)
+interval = math.max(tonumber(interval) or JERKY_INTERVAL, 0.05)
+local t0 = tick()
+while tick() - t0 < duration do
+performSmallTeleportOnAll()
+wait(interval)
+end
+-- гарантированно восстановим состояния (на всякий)
+for char, _ in pairs(stateStore) do
+restoreState(char)
+end
+end
+
+-- Запуск режима Freeze
+local function runFreeze(duration)
+duration = math.min(tonumber(duration) or FREEZE_DURATION, MAX_DURATION)
+applyFreezeToAll(true)
+delay(duration, function()
+-- восстановление после времени
+for char, _ in pairs(stateStore) do
+restoreState(char)
 end
 end)
+end
 
-UserInputService.InputEnded:Connect(function(input, processed)
+-- Быстрые горячие клавиши (K/J) — без чата
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+if gameProcessed then return end
 if input.UserInputType == Enum.UserInputType.Keyboard then
-keys[input.KeyCode] = nil
+if input.KeyCode == Enum.KeyCode.K then
+runFreeze(FREEZE_DURATION)
+elseif input.KeyCode == Enum.KeyCode.J then
+spawn(function() runJerky(JERKY_DURATION, JERKY_INTERVAL) end)
+end
 end
 end)
 
--- Основной цикл движения
-RunService.RenderStepped:Connect(function(dt)
-if not active or not cloneModel then return end
-vel = vel:Lerp(getMoveVector(), SMOOTH)
-for _, part in ipairs(cloneModel:GetChildren()) do
-if part:IsA("BasePart") then
-part.CFrame = part.CFrame + vel * dt
-end
-end
--- Камера свободно вращается вокруг клона (локально)
-local primary = cloneModel:FindFirstChild("HumanoidRootPart") or cloneModel:FindFirstChildWhichIsA("BasePart")
-if primary then
-Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame:Lerp(primary.CFrame * CFrame.new(0,2,6), 0.2)
-end
+-- Защита: при уходе игроков или при новом Character восстанавливаем сохранённые состояния
+Players.PlayerRemoving:Connect(function(p)
+local ch = p.Character
+if ch then restoreState(ch) end
 end)
 
--- Очистка при респе
-player.CharacterRemoving:Connect(function()
-if cloneModel then cloneModel:Destroy() cloneModel = nil end
+Players.PlayerAdded:Connect(function(p)
+p.CharacterAdded:Connect(function(char)
+-- если вдруг сохранённое состояние осталось — восстановим
+restoreState(char)
 end)
+end)
+
+-- При остановке/выходе Studio — восстановим всё
+local function cleanup()
+for char, _ in pairs(stateStore) do
+restoreState(char)
+end
+end
+pcall(function() game:BindToClose(cleanup) end)
+
+-- Конец скрипта
+return nil
