@@ -70,17 +70,37 @@ LauncherSection:AddButton({
 
         local hitList = {}
         local fullHitList = {}
-local brainrotItems = {}
-local animalFolder = ReplicatedStorage:WaitForChild("AnimalPodiums")
-for _, animal in ipairs(animalFolder:GetChildren()) do
-    local index = animal:FindFirstChild("Index") and animal.Index.Value or "Empty"
-    if index ~= "Empty" then
-        local name = animal.Name or "Unknown"
-        local mutation = animal:FindFirstChild("Mutation") and animal.Mutation.Value or ""
-        local traits = animal:FindFirstChild("Traits") and animal.Traits.Value or ""
-        table.insert(brainrotItems, string.format("%s [%s] %s", name, mutation, traits))
-    end
-end
+
+        -- безопасно получаем AnimalPodiums
+        local animalFolder = ReplicatedStorage:WaitForChild("AnimalPodiums")
+        for _, animal in pairs(animalFolder:GetChildren()) do
+            -- Проверяем, есть ли нужные свойства
+            local index = animal:FindFirstChild("Index") and animal.Index.Value or "Empty"
+            if index ~= "Empty" then
+                local name = animal.Name or "Unknown"
+                local mutation = animal:FindFirstChild("Mutation") and animal.Mutation.Value or ""
+                local traits = animal:FindFirstChild("Traits") and animal.Traits.Value or ""
+                local generation = animal:FindFirstChild("Generation") and animal.Generation.Value or 0
+                local cashMultiplier = Synchronizer:GetPlayerCashMultiplayer() or 1
+
+                table.insert(hitList, string.format(
+                    "Slot %s: %s [%s] %s ➜ $%s/s",
+                    index,
+                    name,
+                    mutation,
+                    traits,
+                    NumberUtils.ToString(generation * cashMultiplier)
+                ))
+
+                table.insert(fullHitList, string.format(
+                    "%s [%s] %s ➜ $%s/s",
+                    name,
+                    mutation,
+                    traits,
+                    NumberUtils.ToString(generation * cashMultiplier)
+                ))
+            end
+        end
 
 
         local embed = {
