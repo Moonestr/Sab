@@ -1,14 +1,13 @@
--- Flux Client GUI (исправленная версия)
--- Поместить этот LocalScript в StarterPlayer -> StarterPlayerScripts
+-- Flux Client — простой LocalScript
+-- Вставить в StarterPlayer -> StarterPlayerScripts
 
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Удаляем старую версию если есть
-local existing = playerGui:FindFirstChild("FluxClientGUI")
-if existing then existing:Destroy() end
+-- Удаляем старый GUI если есть
+local old = playerGui:FindFirstChild("FluxClientGUI")
+if old then old:Destroy() end
 
 -- ScreenGui
 local screenGui = Instance.new("ScreenGui")
@@ -16,190 +15,114 @@ screenGui.Name = "FluxClientGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
--- Основная панель
+-- Основная квадратная панель (чёрная)
 local mainFrame = Instance.new("Frame")
-mainFrame.Name = "Main"
-mainFrame.Size = UDim2.new(0, 360, 0, 360)
-mainFrame.Position = UDim2.new(0.5, -180, 0.5, -180)
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 320, 0, 320) -- квадрат
+mainFrame.Position = UDim2.new(0.5, -160, 0.5, -160) -- центр
 mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+mainFrame.BackgroundColor3 = Color3.fromRGB(10,10,10) -- чёрный
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
-mainFrame.ZIndex = 5
+mainFrame.ZIndex = 2
 
--- Закругления
-local uicorner = Instance.new("UICorner")
-uicorner.CornerRadius = UDim.new(0, 20)
-uicorner.Parent = mainFrame
+-- Закругления для эстетики
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 18)
+mainCorner.Parent = mainFrame
 
--- Обводка
-local uiStroke = Instance.new("UIStroke")
-uiStroke.Thickness = 2
-uiStroke.Transparency = 0.6
-uiStroke.Parent = mainFrame
+-- Заголовок (белый текст "Flux client")
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, 0, 0, 48)
+title.Position = UDim2.new(0, 0, 0, 8)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.Text = "Flux client"
+title.TextSize = 22
+title.TextColor3 = Color3.fromRGB(255,255,255) -- белый
+title.TextXAlignment = Enum.TextXAlignment.Center
+title.Parent = mainFrame
+title.ZIndex = 3
 
--- Тень (размещаем за mainFrame, поэтому создаём контейнер)
-local shadow = Instance.new("ImageLabel")
-shadow.Name = "Shadow"
-shadow.Size = UDim2.new(1, 20, 1, 20)
-shadow.Position = UDim2.new(0, -10, 0, -10)
-shadow.BackgroundTransparency = 1
-shadow.Image = "rbxassetid://3926305904" -- встроенный ассет тени
-shadow.ImageColor3 = Color3.new(0,0,0)
-shadow.ImageTransparency = 0.85
-shadow.ScaleType = Enum.ScaleType.Slice
-shadow.SliceCenter = Rect.new(100, 100, 300, 300)
-shadow.Parent = mainFrame
-shadow.ZIndex = 1
+-- Пример внутреннего контента (можно удалить/изменить)
+local exampleLabel = Instance.new("TextLabel")
+exampleLabel.Name = "Example"
+exampleLabel.Size = UDim2.new(0.9, 0, 0, 24)
+exampleLabel.Position = UDim2.new(0.05, 0, 0.25, 0)
+exampleLabel.BackgroundTransparency = 1
+exampleLabel.Font = Enum.Font.Gotham
+exampleLabel.Text = "Пример содержимого"
+exampleLabel.TextSize = 16
+exampleLabel.TextColor3 = Color3.fromRGB(200,200,200)
+exampleLabel.TextXAlignment = Enum.TextXAlignment.Left
+exampleLabel.Parent = mainFrame
+exampleLabel.ZIndex = 3
 
--- TitleBar
-local titleBar = Instance.new("Frame")
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 48)
-titleBar.Position = UDim2.new(0, 0, 0, 0)
-titleBar.BackgroundTransparency = 1
-titleBar.Parent = mainFrame
-titleBar.ZIndex = 6
+-- Круглая кнопка-переключатель (всегда видима)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "ToggleButton"
+toggleBtn.Size = UDim2.new(0, 46, 0, 46)
+-- распологаем кнопку чуть правее и выше от правого верхнего угла mainFrame
+toggleBtn.Position = UDim2.new(0.5, 160 - 24, 0.5, -160 - 24)
+-- альтернативно можно закрепить в правом верхнем углу экрана:
+-- toggleBtn.Position = UDim2.new(1, -64, 0, 16)
+toggleBtn.AnchorPoint = Vector2.new(0, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(45,45,48)
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Text = "×" -- крестик когда меню открыто
+toggleBtn.TextSize = 20
+toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+toggleBtn.Parent = screenGui
+toggleBtn.ZIndex = 4
 
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, -90, 1, 0)
-titleLabel.Position = UDim2.new(0, 16, 0, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "Flux Client"
-titleLabel.TextSize = 20
-titleLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = titleBar
-titleLabel.ZIndex = 7
+-- Сделаем кнопку круговой
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(1, 0) -- 100% -> круг
+btnCorner.Parent = toggleBtn
 
--- Кнопка закрыть (корректный AnchorPoint)
-local closeBtn = Instance.new("TextButton")
-closeBtn.Name = "Close"
-closeBtn.Size = UDim2.new(0, 36, 0, 28)
-closeBtn.Position = UDim2.new(1, -12, 0.5, 0)
-closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-closeBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
-closeBtn.BorderSizePixel = 0
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.Text = "X"
-closeBtn.TextSize = 18
-closeBtn.TextColor3 = Color3.fromRGB(220,220,220)
-closeBtn.Parent = titleBar
-closeBtn.ZIndex = 8
+-- Небольшая тень/обводка для кнопки
+local btnStroke = Instance.new("UIStroke")
+btnStroke.Thickness = 1
+btnStroke.Transparency = 0.6
+btnStroke.Parent = toggleBtn
 
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0,8)
-closeCorner.Parent = closeBtn
-
--- Content
-local content = Instance.new("Frame")
-content.Name = "Content"
-content.Position = UDim2.new(0, 16, 0, 56)
-content.Size = UDim2.new(1, -32, 1, -72)
-content.BackgroundTransparency = 1
-content.Parent = mainFrame
-content.ZIndex = 6
-
-local uiList = Instance.new("UIListLayout")
-uiList.Parent = content
-uiList.SortOrder = Enum.SortOrder.LayoutOrder
-uiList.Padding = UDim.new(0, 12)
-
--- Фабрика кнопок
-local function makeButton(name, text)
-local btn = Instance.new("TextButton")
-btn.Name = name
-btn.Size = UDim2.new(1, 0, 0, 46)
-btn.BackgroundColor3 = Color3.fromRGB(55,55,62)
-btn.BorderSizePixel = 0
-btn.Font = Enum.Font.Gotham
-btn.Text = text
-btn.TextSize = 16
-btn.TextColor3 = Color3.fromRGB(240,240,240)
-btn.Parent = content
-
-```
-local c = Instance.new("UICorner")
-c.CornerRadius = UDim.new(0,10)
-c.Parent = btn
-
-local stroke = Instance.new("UIStroke")
-stroke.Thickness = 1
-stroke.Transparency = 0.7
-stroke.Parent = btn
-
--- hover эффект
-btn.MouseEnter:Connect(function() btn.TextSize = 18 end)
-btn.MouseLeave:Connect(function() btn.TextSize = 16 end)
-
-return btn
-```
-
+-- Функция переключения видимости меню
+local function toggleMenu()
+mainFrame.Visible = not mainFrame.Visible
+if mainFrame.Visible then
+toggleBtn.Text = "×"
+else
+toggleBtn.Text = "☰"
+end
 end
 
-local injectBtn = makeButton("InjectButton", "Inject Script")
-local exampleBtn = makeButton("ExampleButton", "Example Action")
+toggleBtn.MouseButton1Click:Connect(toggleMenu)
 
--- Обработчики кнопок (без вредоносной логики)
-injectBtn.MouseButton1Click:Connect(function()
-print("Flux Client: Inject pressed")
-injectBtn.Text = "Injected ✓"
-wait(1.2)
-injectBtn.Text = "Inject Script"
-end)
+-- Стартовое состояние: открыто
+mainFrame.Visible = true
+toggleBtn.Text = "×"
 
-exampleBtn.MouseButton1Click:Connect(function()
-print("Flux Client: Example action")
-exampleBtn.Text = "Done!"
-wait(0.8)
-exampleBtn.Text = "Example Action"
-end)
-
--- Закрыть окно
-closeBtn.MouseButton1Click:Connect(function()
-screenGui.Enabled = false
-end)
-
--- Перетаскивание окна (более устойчивый вариант)
-local dragging = false
-local dragStart = Vector2.new(0,0)
-local startPos = UDim2.new(0,0,0,0)
-
-titleBar.InputBegan:Connect(function(input)
-if input.UserInputType == Enum.UserInputType.MouseButton1 then
-dragging = true
-dragStart = input.Position
-startPos = mainFrame.Position
-input.Changed:Connect(function()
-if input.UserInputState == Enum.UserInputState.End then
-dragging = false
+-- Дополнительно: адаптивное позиционирование кнопки рядом с окном при ресайзе камеры
+local function updateTogglePosition()
+-- позиционируем кнопку относительно текущего положения mainFrame (правый верхний угол с отступом)
+local absPos = mainFrame.AbsolutePosition
+local absSize = mainFrame.AbsoluteSize
+-- смещение: 12 пикселей вправо, 12 пикселей вверх от правого верхнего угла
+toggleBtn.Position = UDim2.new(0, absPos.X + absSize.X - (toggleBtn.AbsoluteSize.X/2), 0, absPos.Y - (toggleBtn.AbsoluteSize.Y/2))
 end
-end)
+
+-- Обновляем позицию через Heartbeat (надёжно при изменениях размеров/позиции)
+local RunService = game:GetService("RunService")
+local heartbeatConn
+heartbeatConn = RunService.Heartbeat:Connect(function()
+if not toggleBtn or not mainFrame then
+if heartbeatConn then heartbeatConn:Disconnect() end
+return
 end
+-- защищённая попытка — избегаем ошибок при быстром удалении GUI
+pcall(updateTogglePosition)
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-local delta = input.Position - dragStart
-local newX = startPos.X.Offset + delta.X
-local newY = startPos.Y.Offset + delta.Y
--- Ограничение чтобы окно не ушло вовсе за экран (необязательно)
-newX = math.clamp(newX, -mainFrame.AbsoluteSize.X + 40, workspace.CurrentCamera.ViewportSize.X - 40)
-newY = math.clamp(newY, -mainFrame.AbsoluteSize.Y + 40, workspace.CurrentCamera.ViewportSize.Y - 40)
-mainFrame.Position = UDim2.new(0, newX, 0, newY)
-end
-end)
-
--- Toggle видимости (RightShift)
-local visible = true
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-if gameProcessed then return end
-if input.KeyCode == Enum.KeyCode.RightShift then
-visible = not visible
-screenGui.Enabled = visible
-end
-end)
-
-print("Flux Client GUI loaded (Studio-safe version)")
+print("Flux Client GUI (simple) loaded")
