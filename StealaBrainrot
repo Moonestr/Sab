@@ -1,30 +1,31 @@
--- Flux Client GUI
+-- Flux Client GUI (исправленная версия)
 -- Поместить этот LocalScript в StarterPlayer -> StarterPlayerScripts
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Удалим старый экран с тем же именем (если есть)
+-- Удаляем старую версию если есть
 local existing = playerGui:FindFirstChild("FluxClientGUI")
 if existing then existing:Destroy() end
 
--- Экран
+-- ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "FluxClientGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
--- Основная панель (квадратная, но с закруглениями)
+-- Основная панель
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
-mainFrame.Size = UDim2.new(0, 360, 0, 360) -- квадрат
-mainFrame.Position = UDim2.new(0.5, -180, 0.5, -180) -- по центру экрана
+mainFrame.Size = UDim2.new(0, 360, 0, 360)
+mainFrame.Position = UDim2.new(0.5, -180, 0.5, -180)
 mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-mainFrame.BackgroundTransparency = 0
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
+mainFrame.ZIndex = 5
 
 -- Закругления
 local uicorner = Instance.new("UICorner")
@@ -37,33 +38,32 @@ uiStroke.Thickness = 2
 uiStroke.Transparency = 0.6
 uiStroke.Parent = mainFrame
 
--- Тень (имитация)
+-- Тень (размещаем за mainFrame, поэтому создаём контейнер)
 local shadow = Instance.new("ImageLabel")
 shadow.Name = "Shadow"
 shadow.Size = UDim2.new(1, 20, 1, 20)
 shadow.Position = UDim2.new(0, -10, 0, -10)
-shadow.AnchorPoint = Vector2.new(0, 0)
 shadow.BackgroundTransparency = 1
-shadow.Image = "rbxassetid://3926305904" -- subtle round shadow asset (Roblox built-in)
-shadow.ImageColor3 = Color3.fromRGB(0,0,0)
+shadow.Image = "rbxassetid://3926305904" -- встроенный ассет тени
+shadow.ImageColor3 = Color3.new(0,0,0)
 shadow.ImageTransparency = 0.85
 shadow.ScaleType = Enum.ScaleType.Slice
 shadow.SliceCenter = Rect.new(100, 100, 300, 300)
 shadow.Parent = mainFrame
-shadow.ZIndex = 0
+shadow.ZIndex = 1
 
--- Заголовок
+-- TitleBar
 local titleBar = Instance.new("Frame")
 titleBar.Name = "TitleBar"
 titleBar.Size = UDim2.new(1, 0, 0, 48)
 titleBar.Position = UDim2.new(0, 0, 0, 0)
 titleBar.BackgroundTransparency = 1
 titleBar.Parent = mainFrame
-titleBar.ZIndex = 2
+titleBar.ZIndex = 6
 
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, -70, 1, 0)
+titleLabel.Size = UDim2.new(1, -90, 1, 0)
 titleLabel.Position = UDim2.new(0, 16, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Font = Enum.Font.GothamBold
@@ -72,14 +72,14 @@ titleLabel.TextSize = 20
 titleLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = titleBar
-titleLabel.ZIndex = 3
+titleLabel.ZIndex = 7
 
--- Кнопка закрыть
+-- Кнопка закрыть (корректный AnchorPoint)
 local closeBtn = Instance.new("TextButton")
 closeBtn.Name = "Close"
 closeBtn.Size = UDim2.new(0, 36, 0, 28)
-closeBtn.Position = UDim2.new(1, -50, 0.5, -14)
-closeBtn.AnchorPoint = Vector2.new(0,0)
+closeBtn.Position = UDim2.new(1, -12, 0.5, 0)
+closeBtn.AnchorPoint = Vector2.new(1, 0.5)
 closeBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
 closeBtn.BorderSizePixel = 0
 closeBtn.Font = Enum.Font.GothamBold
@@ -87,27 +87,27 @@ closeBtn.Text = "X"
 closeBtn.TextSize = 18
 closeBtn.TextColor3 = Color3.fromRGB(220,220,220)
 closeBtn.Parent = titleBar
-closeBtn.ZIndex = 4
+closeBtn.ZIndex = 8
 
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0,8)
 closeCorner.Parent = closeBtn
 
--- Секция контента
+-- Content
 local content = Instance.new("Frame")
 content.Name = "Content"
 content.Position = UDim2.new(0, 16, 0, 56)
 content.Size = UDim2.new(1, -32, 1, -72)
 content.BackgroundTransparency = 1
 content.Parent = mainFrame
-content.ZIndex = 2
+content.ZIndex = 6
 
 local uiList = Instance.new("UIListLayout")
 uiList.Parent = content
 uiList.SortOrder = Enum.SortOrder.LayoutOrder
 uiList.Padding = UDim.new(0, 12)
 
--- Пример кнопки
+-- Фабрика кнопок
 local function makeButton(name, text)
 local btn = Instance.new("TextButton")
 btn.Name = name
@@ -130,41 +130,44 @@ stroke.Thickness = 1
 stroke.Transparency = 0.7
 stroke.Parent = btn
 
+-- hover эффект
+btn.MouseEnter:Connect(function() btn.TextSize = 18 end)
+btn.MouseLeave:Connect(function() btn.TextSize = 16 end)
+
 return btn
 ```
 
 end
 
 local injectBtn = makeButton("InjectButton", "Inject Script")
-local exploitBtn = makeButton("ExampleButton", "Example Action")
+local exampleBtn = makeButton("ExampleButton", "Example Action")
 
--- Примеры реакций на нажатия
+-- Обработчики кнопок (без вредоносной логики)
 injectBtn.MouseButton1Click:Connect(function()
--- сюда можно вставить логику инжекта или вызвать RemoteEvent и т.д.
 print("Flux Client: Inject pressed")
 injectBtn.Text = "Injected ✓"
 wait(1.2)
 injectBtn.Text = "Inject Script"
 end)
 
-exploitBtn.MouseButton1Click:Connect(function()
+exampleBtn.MouseButton1Click:Connect(function()
 print("Flux Client: Example action")
-exploitBtn.Text = "Done!"
+exampleBtn.Text = "Done!"
 wait(0.8)
-exploitBtn.Text = "Example Action"
+exampleBtn.Text = "Example Action"
 end)
 
--- Закрыть кнопку
+-- Закрыть окно
 closeBtn.MouseButton1Click:Connect(function()
 screenGui.Enabled = false
 end)
 
--- Перетаскивание окна
+-- Перетаскивание окна (более устойчивый вариант)
 local dragging = false
-local dragStart = nil
-local startPos = nil
+local dragStart = Vector2.new(0,0)
+local startPos = UDim2.new(0,0,0,0)
 
-local function onInputBegan(input)
+titleBar.InputBegan:Connect(function(input)
 if input.UserInputType == Enum.UserInputType.MouseButton1 then
 dragging = true
 dragStart = input.Position
@@ -175,24 +178,23 @@ dragging = false
 end
 end)
 end
-end
+end)
 
-local function onInputChanged(input)
+UserInputService.InputChanged:Connect(function(input)
 if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
 local delta = input.Position - dragStart
 local newX = startPos.X.Offset + delta.X
 local newY = startPos.Y.Offset + delta.Y
+-- Ограничение чтобы окно не ушло вовсе за экран (необязательно)
+newX = math.clamp(newX, -mainFrame.AbsoluteSize.X + 40, workspace.CurrentCamera.ViewportSize.X - 40)
+newY = math.clamp(newY, -mainFrame.AbsoluteSize.Y + 40, workspace.CurrentCamera.ViewportSize.Y - 40)
 mainFrame.Position = UDim2.new(0, newX, 0, newY)
 end
-end
+end)
 
-titleBar.InputBegan:Connect(onInputBegan)
-titleBar.InputChanged:Connect(onInputChanged)
-
--- Кнопка для быстрого показа/скрытия (например, RightShift)
-local UserInput = game:GetService("UserInputService")
+-- Toggle видимости (RightShift)
 local visible = true
-UserInput.InputBegan:Connect(function(input, gameProcessed)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
 if gameProcessed then return end
 if input.KeyCode == Enum.KeyCode.RightShift then
 visible = not visible
@@ -200,12 +202,4 @@ screenGui.Enabled = visible
 end
 end)
 
--- Приятные мелочи: курсор при наведении
-for _, v in pairs(content:GetChildren()) do
-if v:IsA("TextButton") then
-v.MouseEnter:Connect(function() v.TextSize = 18 end)
-v.MouseLeave:Connect(function() v.TextSize = 16 end)
-end
-end
-
-print("Flux Client GUI loaded")
+print("Flux Client GUI loaded (Studio-safe version)")
