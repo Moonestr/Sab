@@ -40,7 +40,7 @@ title.TextColor3 = Color3.new(1,1,1)
 title.ZIndex = 3
 title.Parent = mainFrame
 
--- Полоска под заголовком
+-- Белая полоска под заголовком
 local underline = Instance.new("Frame")
 underline.Size = UDim2.new(0,120,0,3)
 underline.Position = UDim2.new(0.5,-60,0,40)
