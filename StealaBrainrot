@@ -45,7 +45,7 @@ end
 
 -- ===== brainrot matching (примерный список — можно расширять) =====
 local BRAINROT_NAMES = {
-    "Los Tralaleritos","Las Tralaleritas","La Cucaracha","Pot Hotspot",
+    "Graipuss Medussi","Las Tralaleritas","La Cucaracha","Las Sis",
     "Tictac Sahur","Spaghetti Tualetti","Dragon Cannelloni","Ketupat Kepat"
 }
 local LOWER_TO_BRAINROT = {}
